@@ -1,15 +1,8 @@
 ﻿using System;
-using System.Data.Common;
+using System.Collections.Generic;
+using System.Text;
 
 namespace CustomersNamespace {
-    public static class StaticGreeter {
-        public static string Message = "static hello";
-        public static void Greet() {
-
-            Console.WriteLine(Message);
-        }
-    }
-
     public class InstanceGreeter {
         public string Message { get; set; }
 
