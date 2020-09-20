@@ -1,19 +1,15 @@
 ﻿using System;
 using HDUnit.Attributes;
 using CustomersNamespace;
+using HDUnit.Assert;
 
 namespace CustomersProjectTests {
     [HDTestClass]
-    class StaticGreeterTests {
+    public static class StaticGreeterTests {
 
         [HDTestMethod]
-        public bool CheckMessage() {
-            if (StaticGreeter.Message == "statitc hello") {
-                return true;
-            }
-
-            return false;
+        public static void CheckMessage() {
+            HDAssert.IsTrue(StaticGreeter.Message == "static hello");
         }
-
     }
 }

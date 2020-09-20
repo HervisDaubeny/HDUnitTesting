@@ -14,8 +14,8 @@ namespace CustomersProjectTests {
         public static void Main(string[] args) {
 
             HDTester.InitTests();
-            HDTester.RunTest("dummyName");
-
+            //HDTester.RunTest("dummyName");
+            /*
             // ### LEGACY ###
             var classes = Assembly.GetExecutingAssembly().GetTypes();
             foreach (var cl in classes) {
@@ -46,7 +46,7 @@ namespace CustomersProjectTests {
                         }
                     }
                 }
-            }
+            } */
         }
     }
 }
