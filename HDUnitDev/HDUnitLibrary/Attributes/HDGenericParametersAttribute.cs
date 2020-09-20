@@ -5,7 +5,7 @@ using System.Text;
 namespace HDUnit.Attributes {
 
     /// <summary>
-    /// Attribute for constructing generic methods.
+    /// Attribute for passing parameters to a generic TestMethod.
     /// </summary>
     /// <example><code lang="cs">
     ///     [HDTestMethod]
@@ -21,7 +21,7 @@ namespace HDUnit.Attributes {
         public Type[] Types { get; set; }
         public object[] Parameters { get; set; }
 
-        public HDGenericParametersAttribute(Type[] Types, object[] Parameters) {
+        public HDGenericParametersAttribute(Type[] Types, params object[] Parameters) {
             this.Types = Types;
             this.Parameters = Parameters;
         }
