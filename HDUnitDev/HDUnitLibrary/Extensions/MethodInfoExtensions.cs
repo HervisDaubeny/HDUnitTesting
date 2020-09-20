@@ -1,6 +1,7 @@
 ﻿using HDUnit.Attributes;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
@@ -8,18 +9,41 @@ namespace HDUnit.Extensions {
     public static class MethodInfoExtensions {
 
         /// <summary>
-        /// enables custom naming of a method -> will display in test results
+        /// Get custom name of the test method or null. Used for printing test results.
         /// </summary>
-        /// <param name="info"></param>
+        /// <param name="Method"></param>
         /// <returns></returns>
-        public static string GetName(this MethodInfo info) {
-            if (info.GetCustomAttribute<HDTestMethodAttribute>() is HDTestMethodAttribute attribute) {
-                if (attribute.MethodName is object) {
-                    return attribute.MethodName;
+        public static string GetCustomName(this MethodInfo Method) {
+            if (Method.GetCustomAttribute<HDTestMethodAttribute>(inherit: false) is HDTestMethodAttribute testMethod) {
+                if (testMethod.MethodName is object) {
+                    return testMethod.MethodName;
                 }
             }
 
-            return info.Name;
+            return null;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="Process"></param>
+        /// <param name="MethodName"></param>
+        /// <returns></returns>
+        public static bool ContainsMethod(this TestProcess Process, string MethodName) {
+            return Process.TestMethods.Select(m => m.Name).Contains(MethodName);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="Method"></param>
+        /// <returns></returns>
+        public static string GetDependency(this MethodInfo Method) {
+            if (Method.GetCustomAttribute<HDRunAfterAttribute>(inherit: false) is HDRunAfterAttribute runAfter) {
+                return runAfter.MethodName;
+            }
+
+            return null;
         }
     }
 }
