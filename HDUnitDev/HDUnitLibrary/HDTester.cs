@@ -28,8 +28,12 @@ namespace HDUnit {
         }
 
         public static void RunTests(Command command) {
-            IEnumerable<Type> classes = GetClasses(TestProject); //TODO: add conditioning according to command
-            IEnumerable<TestProcess> testProcesses = GetProcesses(classes); //TODO: add conditioning according to command
+            TestResultContainer[] lastRun = null;
+            if (command.RunAs > 0) {
+                lastRun = HDTestResultSerializer.Deserialize(); //TODO: think of way how to do this safely with try catch + check if contains valid data
+            }
+            IEnumerable<Type> classes = GetClasses(command, lastRun);
+            IEnumerable<TestProcess> testProcesses = GetProcesses(classes, command, lastRun);
             var tasks = testProcesses.Select(x => x.GetTestsAsTasks()).ToArray();
             foreach (var task in tasks) {
                 task.Start();
@@ -40,24 +44,77 @@ namespace HDUnit {
             HDTestResultSerializer.Serialize(testProcesses.GetResultContainersArray());
         }
         
-        private static IEnumerable<Type> GetClasses(Assembly Assembly) {
-            return Assembly.GetTypes()
-                .Where(t => t.IsClass && t.GetCustomAttribute<HDTestClassAttribute>(inherit: false) is object)
-                .ToList();
+        private static IEnumerable<Type> GetClasses(Command command, TestResultContainer[] lastRun) {
+            IEnumerable<Type> classes = TestProject.GetTypes()
+                .Where(t => t.IsClass && t.GetCustomAttribute<HDTestClassAttribute>(inherit: false) is object);
+            switch (command.RunAs) {
+                case RunMode.Default:
+                    if (command.Namespace.Length > 0) {
+                        classes = classes.Where(t => command.Namespace.Contains(t.Namespace));
+                    }
+                    if (command.Class.Length > 0) {
+                        classes = classes.Where(t => command.Class.Contains(t.GetType().ToString()));
+                    }
+                    break;
+                case RunMode.Repeat:
+                    {
+                        string[] lastClasses = lastRun.Select(r => r.ClassName).Distinct().ToArray();
+                        classes = classes.Where(c => lastClasses.Contains(c.GetType().ToString()));
+                        break;
+                    }
+                case RunMode.Failed:
+                    {
+                        string[] lastClasses = lastRun
+                            .Where(r => r.TestResult == TestResult.Failed)
+                            .Select(r => r.ClassName).Distinct().ToArray();
+                        classes = classes.Where(c => lastClasses.Contains(c.GetType().ToString()));
+                        break;
+                    }
+                case RunMode.Passed:
+                    {
+                        string[] lastClasses = lastRun
+                            .Where(r => r.TestResult == TestResult.Passed)
+                            .Select(r => r.ClassName).Distinct().ToArray();
+                        classes = classes.Where(c => lastClasses.Contains(c.GetType().ToString()));
+                        break;
+                    }
+                case RunMode.New:
+                    /* this Enum value will have meaning when filtering methods */
+                    break;
+                default:
+                    throw new Exception("Impossible, but value was added to Enum and actually used.");
+            }
+
+            return classes;
         }
 
-        private static IEnumerable<TestProcess> GetProcesses(IEnumerable<Type> Classes) {
+        private static IEnumerable<TestProcess> GetProcesses(IEnumerable<Type> Classes, Command command, TestResultContainer[] lastRun) {
             List<TestProcess> processColection = new List<TestProcess>();
 
             foreach (var Class in Classes) {
                 object classInstance = Class.CreateInstance();
-                List<MethodInfo> allMethods = Class.GetMethods()
+                List<MethodInfo> methodToRun = Class.GetMethods()
                     .Where(m => m.GetCustomAttribute<HDTestMethodAttribute>(inherit: false) is object)
                     .ToList();
-                List<MethodInfo> independentMethods = allMethods
+                switch (command.RunAs) { //TODO: filter methods to run
+                    case RunMode.Default:
+                        break;
+                    case RunMode.Repeat:
+                        break;
+                    case RunMode.Failed:
+                        break;
+                    case RunMode.Passed:
+                        break;
+                    case RunMode.New:
+                        break;
+                    default:
+                        break;
+                }
+
+                List<MethodInfo> independentMethods = methodToRun
                     .Where(m => !(m.GetCustomAttribute<HDRunAfterAttribute>(inherit: false) is object))
                     .ToList();
-                List<MethodInfo> dependentMethods = allMethods
+                List<MethodInfo> dependentMethods = methodToRun
                     .Where(m => m.GetCustomAttribute<HDRunAfterAttribute>(inherit: false) is object)
                     .ToList();
                 TestProcess[] processes = independentMethods
@@ -185,7 +242,7 @@ namespace HDUnit {
                 else if (methods[i].GetCustomAttributes<HDGenericParametersAttribute>(inherit: false) is HDGenericParametersAttribute[] gAtts && gAtts.Length > 0) {
                     for (int j = 0; j < gAtts.Length; j++, resultIndex++) {
                         try {
-                            var genericMethRunable = methods[i].MakeGenericMethod(gAtts[j].Types); //TODO: cannot call multiple times!!!
+                            var genericMethRunable = methods[i].MakeGenericMethod(gAtts[j].Types);
                             timer.Reset();
                             timer.Start();
                             genericMethRunable.Invoke(this.ClassInstance, gAtts[j].Parameters);
