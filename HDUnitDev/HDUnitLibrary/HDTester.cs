@@ -9,18 +9,21 @@ using System.Runtime.CompilerServices;
 using HDUnit.Extensions;
 using HDUnit.Exceptions;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 using System.Data;
+using Pastel;
+using System.Drawing;
+using Microsoft.VisualBasic;
+using Newtonsoft.Json;
+using System.IO;
+using System.Collections;
 
 namespace HDUnit {
     public static class HDTester {
-
         private static Assembly TestProject;
-
-        private static List<Type> TestClassList = new List<Type>();
-        private static List<List<MethodInfo>> TestMethodsNestedList = new List<List<MethodInfo>>();
-        private static List<List<MethodInfo>> TestMethodsCallOrder = new List<List<MethodInfo>>();
+        private static string outputPath = Directory.GetCurrentDirectory() + "\\tests_output.txt";
+        private static TextWriter originalOutput;
+        private static TextWriter redirectedOutput;
+        private static FileStream redirectedFilestream;
 
         public static void InitTests() {
             TestProject = Assembly.GetCallingAssembly();
@@ -28,23 +31,44 @@ namespace HDUnit {
         }
 
         public static void RunTests(Command command) {
+            string[] invalidNamespaces = Array.Empty<string>();
+            string[] invalidClasess = Array.Empty<string>();
+            string[] invalidMethods = Array.Empty<string>();
+            IEnumerable<Type> classes = null;
+            IEnumerable<TestProcess> testProcesses = null;
             TestResultContainer[] lastRun = null;
             if (command.RunAs > 0) {
-                lastRun = HDTestResultSerializer.Deserialize(); //TODO: think of way how to do this safely with try catch + check if contains valid data
-            }
-            IEnumerable<Type> classes = GetClasses(command, lastRun);
-            IEnumerable<TestProcess> testProcesses = GetProcesses(classes, command, lastRun);
-            var tasks = testProcesses.Select(x => x.GetTestsAsTasks()).ToArray();
-            foreach (var task in tasks) {
-                task.Start();
+                lastRun = HDTestResultSerializer.Deserialize();
             }
 
-            Task.WaitAll(tasks);
+            classes = GetClasses(command, lastRun, out invalidClasess, out invalidNamespaces);
+            testProcesses = GetProcesses(classes, command, lastRun, out invalidMethods);
+            var tasks = testProcesses.Select(x => x.GetTestsAsTasks()).ToArray();
+            RedirectOutput();
+            if (command.MultithreadRun) {
+                foreach (var task in tasks) {
+                    task.Start();
+                }
+
+                Task.WaitAll(tasks);
+            }
+            else {
+                foreach (var task in tasks) {
+                    task.RunSynchronously();
+                }
+            }
+            ResetOutput();
             HDResultPrinter.Print(testProcesses.GetResultContainersArray());
+            HDResultPrinter.PrintIfNotEmpty(invalidMethods, invalidClasess, invalidNamespaces);
             HDTestResultSerializer.Serialize(testProcesses.GetResultContainersArray());
         }
         
-        private static IEnumerable<Type> GetClasses(Command command, TestResultContainer[] lastRun) {
+        private static IEnumerable<Type> GetClasses(
+                Command command,
+                TestResultContainer[] lastRun,
+                out string[] invalidClasses,
+                out string[] invalidNamespaces) {
+
             IEnumerable<Type> classes = TestProject.GetTypes()
                 .Where(t => t.IsClass && t.GetCustomAttribute<HDTestClassAttribute>(inherit: false) is object);
             switch (command.RunAs) {
@@ -53,29 +77,29 @@ namespace HDUnit {
                         classes = classes.Where(t => command.Namespace.Contains(t.Namespace));
                     }
                     if (command.Class.Length > 0) {
-                        classes = classes.Where(t => command.Class.Contains(t.GetType().ToString()));
+                        classes = classes.Where(t => command.Class.Contains(t.Name));
                     }
                     break;
                 case RunMode.Repeat:
                     {
-                        string[] lastClasses = lastRun.Select(r => r.ClassName).Distinct().ToArray();
-                        classes = classes.Where(c => lastClasses.Contains(c.GetType().ToString()));
+                        var lastClasses = lastRun.Select(r => r.ClassName).ToHashSet();
+                        classes = classes.Where(c => lastClasses.Contains(c.Name));
                         break;
                     }
                 case RunMode.Failed:
                     {
-                        string[] lastClasses = lastRun
+                        var lastClasses = lastRun
                             .Where(r => r.TestResult == TestResult.Failed)
-                            .Select(r => r.ClassName).Distinct().ToArray();
-                        classes = classes.Where(c => lastClasses.Contains(c.GetType().ToString()));
+                            .Select(r => r.ClassName).ToHashSet();
+                        classes = classes.Where(c => lastClasses.Contains(c.Name));
                         break;
                     }
                 case RunMode.Passed:
                     {
-                        string[] lastClasses = lastRun
+                        var lastClasses = lastRun
                             .Where(r => r.TestResult == TestResult.Passed)
-                            .Select(r => r.ClassName).Distinct().ToArray();
-                        classes = classes.Where(c => lastClasses.Contains(c.GetType().ToString()));
+                            .Select(r => r.ClassName).ToHashSet();
+                        classes = classes.Where(c => lastClasses.Contains(c.Name));
                         break;
                     }
                 case RunMode.New:
@@ -84,41 +108,74 @@ namespace HDUnit {
                 default:
                     throw new Exception("Impossible, but value was added to Enum and actually used.");
             }
+            invalidClasses = command.Class.Where(t => !(classes.Names().Contains(t))).ToArray();
+            invalidNamespaces = command.Namespace.Where(n => !(classes.Namespaces().Contains(n))).ToArray();
 
             return classes;
         }
 
-        private static IEnumerable<TestProcess> GetProcesses(IEnumerable<Type> Classes, Command command, TestResultContainer[] lastRun) {
+        private static IEnumerable<TestProcess> GetProcesses(
+                IEnumerable<Type> Classes,
+                Command command,
+                TestResultContainer[] lastRun,
+                out string[] invalidMethods) {
+            
             List<TestProcess> processColection = new List<TestProcess>();
+            List<String> existenceCheck = new List<string>();
 
             foreach (var Class in Classes) {
                 object classInstance = Class.CreateInstance();
-                List<MethodInfo> methodToRun = Class.GetMethods()
-                    .Where(m => m.GetCustomAttribute<HDTestMethodAttribute>(inherit: false) is object)
-                    .ToList();
-                switch (command.RunAs) { //TODO: filter methods to run
+                IEnumerable<TestResultContainer> lastRunFiltered = lastRun;
+                IEnumerable<MethodInfo> methodsToRun = Class.GetMethods()
+                    .Where(m => m.GetCustomAttribute<HDTestMethodAttribute>(inherit: false) is object);
+                existenceCheck.AddRange(methodsToRun.Select(m => m.Name));
+                if (command.RunAs > 0) {
+                    lastRunFiltered = lastRun.Where(run => run.ClassName == Class.Name);
+                }
+                switch (command.RunAs) {
                     case RunMode.Default:
+                        if (command.Args.Length > 0) {
+                            methodsToRun = methodsToRun.Where(m => command.Args.Contains(m.Name));
+                        }
                         break;
                     case RunMode.Repeat:
+                        var lastRunMethods = lastRunFiltered
+                            .Select(m => m.MethodName)
+                            .ToHashSet();
+                        methodsToRun = methodsToRun.Where(m => lastRunMethods.Contains(m.Name));
                         break;
                     case RunMode.Failed:
+                        var failedMethods = lastRunFiltered
+                            .Where(m => m.TestResult == TestResult.Failed)
+                            .Select(r => r.MethodName)
+                            .ToHashSet();
+                        methodsToRun = methodsToRun.Where(m => failedMethods.Contains(m.Name));
                         break;
                     case RunMode.Passed:
+                        var passedMethods = lastRunFiltered
+                            .Where(m => m.TestResult == TestResult.Passed)
+                            .Select(r => r.MethodName)
+                            .ToHashSet();
+                        methodsToRun = methodsToRun.Where(m => passedMethods.Contains(m.Name));
                         break;
                     case RunMode.New:
+                        var testedMethods = lastRunFiltered
+                            .Select(r => r.MethodName)
+                            .ToHashSet();
+                        methodsToRun = methodsToRun.Where(m => !(testedMethods.Contains(m.Name)));
                         break;
                     default:
                         break;
                 }
 
-                List<MethodInfo> independentMethods = methodToRun
+                List<MethodInfo> independentMethods = methodsToRun
                     .Where(m => !(m.GetCustomAttribute<HDRunAfterAttribute>(inherit: false) is object))
                     .ToList();
-                List<MethodInfo> dependentMethods = methodToRun
+                List<MethodInfo> dependentMethods = methodsToRun
                     .Where(m => m.GetCustomAttribute<HDRunAfterAttribute>(inherit: false) is object)
                     .ToList();
                 TestProcess[] processes = independentMethods
-                    .Select(m => new TestProcess(m, classInstance))
+                    .Select(m => new TestProcess(m, classInstance, Class.Name))
                     .ToArray();
 
                 while (dependentMethods.Count > 0) {
@@ -147,7 +204,24 @@ namespace HDUnit {
                 processColection.AddRange(processes);
             }
 
+            invalidMethods = command.Args.Where(m => !(existenceCheck.Contains(m))).ToArray();
             return processColection;
+        }
+
+        private static void RedirectOutput() {
+            originalOutput = Console.Out;
+            redirectedFilestream = File.OpenWrite(outputPath);
+            redirectedOutput = new StreamWriter(redirectedFilestream);
+            Console.SetOut(redirectedOutput);
+        }
+
+        private static void ResetOutput() {
+            redirectedOutput.Flush();
+            redirectedOutput.Close();
+            redirectedOutput.Dispose();
+            redirectedFilestream.Close();
+            redirectedFilestream.Dispose();
+            Console.SetOut(originalOutput);
         }
     }
 
@@ -156,13 +230,15 @@ namespace HDUnit {
     /// </summary>
     public class TestProcess {
 
+        public string ClassName { get; set; }
         public IEnumerable<MethodInfo> TestMethods { get; set; }
         public object ClassInstance { get; set; }
         public TestResultContainer[] TestResult { get; set; }
 
-        public TestProcess(MethodInfo TestMethod, object ClassInstance) {
+        public TestProcess(MethodInfo TestMethod, object ClassInstance, string ClassName) {
             this.TestMethods = new List<MethodInfo>() { TestMethod };
             this.ClassInstance = ClassInstance;
+            this.ClassName = ClassName;
         }
 
         /// <summary>
@@ -220,6 +296,11 @@ namespace HDUnit {
                                 timer.ElapsedMilliseconds);
                         }
                         catch (Exception e) when (e.InnerException is HDAssertFailedException ex) {
+                            string errorMessage = ex.Message;
+                            if (ex.Errors.Any()) {
+                                errorMessage += '\n';
+                                errorMessage += ex.Errors.GetContents();
+                            }
                             results[resultIndex] = new TestResultContainer(
                                 HDUnit.TestResult.Failed,
                                 this.GetClassName(),
@@ -227,7 +308,7 @@ namespace HDUnit {
                                 methods[i].GetCustomName(),
                                 new string[0],
                                 atts[j].GetParams(),
-                                ResultMessage: ex.Message);
+                                ResultMessage: errorMessage);
                         }
                         catch (Exception e) when (!(e.InnerException is HDAssertFailedException)) {
                             string methodRep = "";
@@ -257,6 +338,11 @@ namespace HDUnit {
                                 timer.ElapsedMilliseconds);
                         }
                         catch (Exception e) when (e.InnerException is HDAssertFailedException ex) {
+                            string errorMessage = ex.Message;
+                            if (ex.Errors.Any()) {
+                                errorMessage += '\n';
+                                errorMessage += ex.Errors.GetContents();
+                            }
                             results[resultIndex] = new TestResultContainer(
                                 HDUnit.TestResult.Failed,
                                 this.GetClassName(),
@@ -264,7 +350,7 @@ namespace HDUnit {
                                 methods[i].GetCustomName(),
                                 gAtts[j].GetTypes(),
                                 gAtts[j].GetParams(),
-                                ResultMessage: ex.Message);
+                                ResultMessage: errorMessage);
                         }
                         catch (Exception e) when (!(e.InnerException is HDAssertFailedException)) {
                             string methodRep = "";
@@ -292,6 +378,11 @@ namespace HDUnit {
                                 timer.ElapsedMilliseconds);
                 }
                 catch (Exception e) when (e.InnerException is HDAssertFailedException ex) {
+                    string errorMessage = ex.Message;
+                    if (ex.Errors.Any()) {
+                        errorMessage += '\n';
+                        errorMessage += ex.Errors.GetContents();
+                    }
                     results[resultIndex] = new TestResultContainer(
                                 HDUnit.TestResult.Failed,
                                 this.GetClassName(),
@@ -299,7 +390,7 @@ namespace HDUnit {
                                 methods[i].GetCustomName(),
                                 new string[0],
                                 new string[0],
-                                ResultMessage: ex.Message);
+                                ResultMessage: errorMessage);
                 }
                 catch (Exception e) when (!(e.InnerException is HDAssertFailedException)) {
                     string methodRep = "";
@@ -313,6 +404,10 @@ namespace HDUnit {
     }
 
     public class TestResultContainer {
+        [JsonIgnore]
+        private string passedMessage = "PASSED".Pastel(Color.Green);
+        [JsonIgnore]
+        private string failedMessage = "FAILED".Pastel(Color.Red);
 
         public TestResult TestResult { get; set; }
         public string ClassName { get; set; }
@@ -359,20 +454,20 @@ namespace HDUnit {
             string representation = "";
 
             if (MethodAlias is object) {
-                representation += MethodAlias;
+                representation += $"Test name: {MethodAlias}\n";
+            }
+            if (TestResult == TestResult.Passed) {
+                representation += $"{passedMessage} -- ";
             }
             else {
-                representation += MethodName;
+                representation += $"{failedMessage} -- ";
             }
+            representation += MethodName;
             if (GenericParameters.Length > 0) {
                 representation += $"<{GenericParameters.GetContent()}>";
             }
-            representation += $"({Parameters.GetContent()})";
-            if (TestResult == TestResult.Passed) {
-                representation += " -- PASSED\n";
-            }
-            else {
-                representation += " -- FAILED\n";
+            representation += $"({Parameters.GetContent()})\n";
+            if (TestResult == TestResult.Failed) {
                 representation += $"message: {ResultMessage}\n";
             }
             representation += $"ran: {TestTime}ms\n";
