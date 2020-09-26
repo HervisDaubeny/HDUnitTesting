@@ -6,6 +6,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace HDUnit {
+
+    /// <summary>
+    /// Class for communication with the user and controlling test running.
+    /// </summary>
     static class HDConsoleControl {
         const string classKeyword = "--class:";
         const string classShortcut = "-c:";
@@ -25,6 +29,9 @@ namespace HDUnit {
         static char[] inputSeparators = new char[] { ' ' };
         static int state = 0;
 
+        /// <summary>
+        /// Start up ConsoleControl.
+        /// </summary>
         public static void Run() {
             while (state >= 0) {
                 switch (state) {
@@ -41,13 +48,18 @@ namespace HDUnit {
 
         }
 
+        /// <summary>
         /// Initial state. Greet, ask for input, offer a help.
+        /// </summary>
         private static void State0() {
             Console.WriteLine("Welcome to HDUnitTesting. For list of commands type 'help' in the console.");
             Console.WriteLine("To exit input newLine.");
             state = 1;
         }
+
+        /// <summary>
         /// Read input, decide next state.
+        /// </summary>
         private static void State1() {
             Console.Write('>');
             var command = GetCommand(Console.ReadLine());
@@ -67,7 +79,7 @@ namespace HDUnit {
                     state = 1;
                     break;
                 case "set_path":
-                    HDTestResultSerializer.SetPath(command.Args[0]);
+                    HDTestResultSerializer.SetPath(command.Methods[0]);
                     state = 1;
                     break;
                 case "":
@@ -79,12 +91,20 @@ namespace HDUnit {
                     break;
             }
         }
+
+        /// <summary>
         /// Terminating state.
+        /// </summary>
         private static void StateN() {
             Console.WriteLine("If you made any change to the project you are testing, " +
                 "please don't forget to rebuild the solution before running the tests again.");
         }
 
+        /// <summary>
+        /// Create new command from given string.
+        /// </summary>
+        /// <param name="input">String to use</param>
+        /// <returns>Command given by the user</returns>
         private static Command GetCommand(string input) {
             char[] innerSep = new char[] { ':' };
             string Name = default(string);
@@ -137,26 +157,57 @@ namespace HDUnit {
 
             return new Command(Name, Args.ToArray(), Class.ToArray(), Namespace.ToArray(), Multithread, RunAs);
         }
-    }   
+    }
+
+    /// <summary>
+    /// Class representing users command.
+    /// </summary>
     public class Command {
+        /// <summary>
+        /// Name of the command
+        /// </summary>
         public string Value { get; set; }
-        public string[] Args { get; set; } = Array.Empty<string>();
-        public string[] Class { get; set; } = Array.Empty<string>();
-        public string[] Namespace { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// Methods from the input
+        /// </summary>
+        public string[] Methods { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// Classes from the input
+        /// </summary>
+        public string[] Classes { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// Namespaces from the input
+        /// </summary>
+        public string[] Namespaces { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// Flag signaling usage of single or multi threaded run
+        /// </summary>
         public bool MultithreadRun { get; set; }
+        /// <summary>
+        /// Enum describing the desired run mode
+        /// </summary>
         public RunMode RunAs { get; set; }
 
+        /// <summary>
+        /// Create new Command
+        /// </summary>
+        /// <param name="Name">Name of the command</param>
+        /// <param name="Args">Methods from the input</param>
+        /// <param name="Class">Classes from the input</param>
+        /// <param name="Namespace">Namespaces from the input</param>
+        /// <param name="Multithreaded">Flag signaling usage of single or multi threaded run</param>
+        /// <param name="RunAs">Enum describing the desired run mode</param>
         public Command(string Name, string[] Args, string[] Class, string[] Namespace, bool Multithreaded, RunMode RunAs) {
             this.Value = Name;
             this.RunAs = RunAs;
             if (Args.Length > 0) {
-                this.Args = Args;
+                this.Methods = Args;
             }
             if (Class.Length > 0) {
-                this.Class = Class;
+                this.Classes = Class;
             }
             if (Namespace.Length > 0) {
-                this.Namespace = Namespace;
+                this.Namespaces = Namespace;
             }
             if (Multithreaded) {
                 this.MultithreadRun = true;
@@ -164,6 +215,9 @@ namespace HDUnit {
         }
     }
 
+    /// <summary>
+    /// Enumerator used for deciding what to do with results from last test
+    /// </summary>
     public enum RunMode {
         Default,
         Repeat,

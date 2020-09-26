@@ -6,13 +6,17 @@ using System.Reflection;
 using System.Text;
 
 namespace HDUnit.Extensions {
+
+
+    /// <summary>
+    /// Extension method for MethodInfo
+    /// </summary>
     public static class MethodInfoExtensions {
 
         /// <summary>
-        /// Get custom name of the test method or null. Used for printing test results.
+        /// Get custom name of the test method or null.
         /// </summary>
-        /// <param name="Method"></param>
-        /// <returns></returns>
+        /// <returns>Null or user given name of method</returns>
         public static string GetCustomName(this MethodInfo Method) {
             if (Method.GetCustomAttribute<HDTestMethodAttribute>(inherit: false) is HDTestMethodAttribute testMethod) {
                 if (testMethod.MethodName is object) {
@@ -24,20 +28,18 @@ namespace HDUnit.Extensions {
         }
 
         /// <summary>
-        /// 
+        /// Verify if this TestProcess contains given method.
         /// </summary>
-        /// <param name="Process"></param>
-        /// <param name="MethodName"></param>
-        /// <returns></returns>
+        /// <param name="MethodName">Name of method to check</param>
+        /// <returns>True if method is contained, False otherwise.</returns>
         public static bool ContainsMethod(this TestProcess Process, string MethodName) {
             return Process.TestMethods.Select(m => m.Name).Contains(MethodName);
         }
 
         /// <summary>
-        /// 
+        /// Get name of the method this method has to be run after.
         /// </summary>
-        /// <param name="Method"></param>
-        /// <returns></returns>
+        /// <returns>Null or name of the method</returns>
         public static string GetDependency(this MethodInfo Method) {
             if (Method.GetCustomAttribute<HDRunAfterAttribute>(inherit: false) is HDRunAfterAttribute runAfter) {
                 return runAfter.MethodName;

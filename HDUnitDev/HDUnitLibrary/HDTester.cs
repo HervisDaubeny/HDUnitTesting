@@ -18,18 +18,35 @@ using System.IO;
 using System.Collections;
 
 namespace HDUnit {
+
+    /// <summary>
+    /// Class containing the core of HDUnitTesting
+    /// </summary>
     public static class HDTester {
+        /// <summary>
+        /// Reference to assembly with tests
+        /// </summary>
         private static Assembly TestProject;
+        /// <summary>
+        /// File that contains output written by test methods to console.
+        /// </summary>
         private static string outputPath = Directory.GetCurrentDirectory() + "\\tests_output.txt";
         private static TextWriter originalOutput;
         private static TextWriter redirectedOutput;
         private static FileStream redirectedFilestream;
 
+        /// <summary>
+        /// Initialize tests and open test controlling console.
+        /// </summary>
         public static void InitTests() {
             TestProject = Assembly.GetCallingAssembly();
             HDConsoleControl.Run();
         }
 
+        /// <summary>
+        /// Gets TestClasses from calling assembly, apply filters defined by users command and run tests.
+        /// </summary>
+        /// <param name="command">Users command</param>
         public static void RunTests(Command command) {
             string[] invalidNamespaces = Array.Empty<string>();
             string[] invalidClasess = Array.Empty<string>();
@@ -43,7 +60,7 @@ namespace HDUnit {
 
             classes = GetClasses(command, lastRun, out invalidClasess, out invalidNamespaces);
             testProcesses = GetProcesses(classes, command, lastRun, out invalidMethods);
-            var tasks = testProcesses.Select(x => x.GetTestsAsTasks()).ToArray();
+            var tasks = testProcesses.Select(x => x.GetTestsAsTask()).ToArray();
             RedirectOutput();
             if (command.MultithreadRun) {
                 foreach (var task in tasks) {
@@ -63,6 +80,14 @@ namespace HDUnit {
             HDTestResultSerializer.Serialize(testProcesses.GetResultContainersArray());
         }
         
+        /// <summary>
+        /// Apply conditions defined by users command and get classes from calling assembly.
+        /// </summary>
+        /// <param name="command">Created from users input</param>
+        /// <param name="lastRun">Deserialized results of last run</param>
+        /// <param name="invalidClasses">Classes that are not in the calling assembly</param>
+        /// <param name="invalidNamespaces">Namespces that are not in the calling assembly</param>
+        /// <returns>Collection of filtered test classes</returns>
         private static IEnumerable<Type> GetClasses(
                 Command command,
                 TestResultContainer[] lastRun,
@@ -73,11 +98,11 @@ namespace HDUnit {
                 .Where(t => t.IsClass && t.GetCustomAttribute<HDTestClassAttribute>(inherit: false) is object);
             switch (command.RunAs) {
                 case RunMode.Default:
-                    if (command.Namespace.Length > 0) {
-                        classes = classes.Where(t => command.Namespace.Contains(t.Namespace));
+                    if (command.Namespaces.Length > 0) {
+                        classes = classes.Where(t => command.Namespaces.Contains(t.Namespace));
                     }
-                    if (command.Class.Length > 0) {
-                        classes = classes.Where(t => command.Class.Contains(t.Name));
+                    if (command.Classes.Length > 0) {
+                        classes = classes.Where(t => command.Classes.Contains(t.Name));
                     }
                     break;
                 case RunMode.Repeat:
@@ -108,12 +133,20 @@ namespace HDUnit {
                 default:
                     throw new Exception("Impossible, but value was added to Enum and actually used.");
             }
-            invalidClasses = command.Class.Where(t => !(classes.Names().Contains(t))).ToArray();
-            invalidNamespaces = command.Namespace.Where(n => !(classes.Namespaces().Contains(n))).ToArray();
+            invalidClasses = command.Classes.Where(t => !(classes.Names().Contains(t))).ToArray();
+            invalidNamespaces = command.Namespaces.Where(n => !(classes.Namespaces().Contains(n))).ToArray();
 
             return classes;
         }
 
+        /// <summary>
+        /// Get test methods organised to TestProcesses.
+        /// </summary>
+        /// <param name="Classes">Classes to search for test methods</param>
+        /// <param name="command">Created from users input</param>
+        /// <param name="lastRun">Deserialized results of last run</param>
+        /// <param name="invalidMethods">Methods that are not in given Classes</param>
+        /// <returns>Collection of TestProcesses</returns>
         private static IEnumerable<TestProcess> GetProcesses(
                 IEnumerable<Type> Classes,
                 Command command,
@@ -134,8 +167,8 @@ namespace HDUnit {
                 }
                 switch (command.RunAs) {
                     case RunMode.Default:
-                        if (command.Args.Length > 0) {
-                            methodsToRun = methodsToRun.Where(m => command.Args.Contains(m.Name));
+                        if (command.Methods.Length > 0) {
+                            methodsToRun = methodsToRun.Where(m => command.Methods.Contains(m.Name));
                         }
                         break;
                     case RunMode.Repeat:
@@ -204,10 +237,13 @@ namespace HDUnit {
                 processColection.AddRange(processes);
             }
 
-            invalidMethods = command.Args.Where(m => !(existenceCheck.Contains(m))).ToArray();
+            invalidMethods = command.Methods.Where(m => !(existenceCheck.Contains(m))).ToArray();
             return processColection;
         }
 
+        /// <summary>
+        /// Redirect output from console to a file.
+        /// </summary>
         private static void RedirectOutput() {
             originalOutput = Console.Out;
             redirectedFilestream = File.OpenWrite(outputPath);
@@ -215,6 +251,9 @@ namespace HDUnit {
             Console.SetOut(redirectedOutput);
         }
 
+        /// <summary>
+        /// Reset output back to console.
+        /// </summary>
         private static void ResetOutput() {
             redirectedOutput.Flush();
             redirectedOutput.Close();
@@ -226,15 +265,33 @@ namespace HDUnit {
     }
 
     /// <summary>
-    /// Object representing a process that is run in desired order, through parallel execution.
+    /// Object representing test process, ensuring desired order of test methods.
     /// </summary>
     public class TestProcess {
 
+        /// <summary>
+        /// Name of class used by methods from <paramref name="TestMethods"/>
+        /// </summary>
         public string ClassName { get; set; }
+        /// <summary>
+        /// Test methods
+        /// </summary>
         public IEnumerable<MethodInfo> TestMethods { get; set; }
+        /// <summary>
+        /// Instance of class named in <paramref name="ClassName"/>
+        /// </summary>
         public object ClassInstance { get; set; }
+        /// <summary>
+        /// Array with results of all run test methods
+        /// </summary>
         public TestResultContainer[] TestResult { get; set; }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="TestMethod"></param>
+        /// <param name="ClassInstance"></param>
+        /// <param name="ClassName"></param>
         public TestProcess(MethodInfo TestMethod, object ClassInstance, string ClassName) {
             this.TestMethods = new List<MethodInfo>() { TestMethod };
             this.ClassInstance = ClassInstance;
@@ -242,7 +299,7 @@ namespace HDUnit {
         }
 
         /// <summary>
-        /// 
+        /// Object representing test process, ensuring desired order of test methods.
         /// </summary>
         /// <param name="DependantMethod"></param>
         public void AddDependentMethod(MethodInfo DependantMethod) {
@@ -251,10 +308,17 @@ namespace HDUnit {
             TestMethods = newTestMethods;
         }
 
-        public Task GetTestsAsTasks() {
+        /// <summary>
+        /// Get task that will run the test methods.
+        /// </summary>
+        /// <returns>Runnable task</returns>
+        public Task GetTestsAsTask() {
             return new Task(InternalRun);
         }
 
+        /// <summary>
+        /// Run test methods
+        /// </summary>
         private void InternalRun() {
             MethodInfo[] methods = this.TestMethods.ToArray();
             int genericRuns = methods
@@ -403,32 +467,66 @@ namespace HDUnit {
         }
     }
 
+    /// <summary>
+    /// Container for storing test results
+    /// </summary>
     public class TestResultContainer {
+        
+        /// <summary>
+        /// Predefined message
+        /// </summary>
         [JsonIgnore]
         private string passedMessage = "PASSED".Pastel(Color.Green);
+        /// <summary>
+        /// Predefined message
+        /// </summary>
         [JsonIgnore]
         private string failedMessage = "FAILED".Pastel(Color.Red);
 
+        /// <summary>
+        /// Result of test method
+        /// </summary>
         public TestResult TestResult { get; set; }
+        /// <summary>
+        /// Name of class defining the test method
+        /// </summary>
         public string ClassName { get; set; }
+        /// <summary>
+        /// Name of test the method
+        /// </summary>
         public string MethodName { get; set; }
+        /// <summary>
+        /// Alias of the test method
+        /// </summary>
         public string MethodAlias { get; set; }
+        /// <summary>
+        /// Generic types of the test method
+        /// </summary>
         public string[] GenericParameters { get; set; }
+        /// <summary>
+        /// Parameters of the test method
+        /// </summary>
         public string[] Parameters { get; set; }
+        /// <summary>
+        /// Error message resulting from the test method
+        /// </summary>
         public string ResultMessage { get; set; }
+        /// <summary>
+        /// Length of the test run measured in miliseconds
+        /// </summary>
         public long TestTime { get; set; }
 
         /// <summary>
         /// Create new TestResultContainer to save the results.
         /// </summary>
-        /// <param name="TestResult"></param>
-        /// <param name="ClassName"></param>
-        /// <param name="MethodName"></param>
-        /// <param name="MethodAlias"></param>
-        /// <param name="GenericParameters"></param>
-        /// <param name="Parameters"></param>
-        /// <param name="TestTime"></param>
-        /// <param name="ResultMessage"></param>
+        /// <param name="TestResult">Result of test method</param>
+        /// <param name="ClassName">Name of class defining the test method</param>
+        /// <param name="MethodName">Name of test the method</param>
+        /// <param name="MethodAlias">Alias of the test method</param>
+        /// <param name="GenericParameters">Generic types of the test method</param>
+        /// <param name="Parameters">Parameters of the test method</param>
+        /// <param name="TestTime">Length of the test run measured in miliseconds</param>
+        /// <param name="ResultMessage">Error message resulting from the test method</param>
         public TestResultContainer(
             TestResult TestResult,
             string ClassName,
@@ -449,6 +547,10 @@ namespace HDUnit {
             this.TestTime = TestTime;
         }
 
+        /// <summary>
+        /// Override the default ToString method.
+        /// </summary>
+        /// <returns>Valid string representation of the TestResultContainer </returns>
         public override string ToString() {
             const string separator = "========================================";
             string representation = "";
@@ -477,6 +579,9 @@ namespace HDUnit {
         }
     }
 
+    /// <summary>
+    /// Enum representing if the test passed or failed.
+    /// </summary>
     public enum TestResult {
         Failed,
         Passed
