@@ -52,7 +52,7 @@ namespace HDUnit {
             Console.Write('>');
             var command = GetCommand(Console.ReadLine());
 
-            switch (command.Name) {
+            switch (command.Value) {
                 case "help":
                     Console.WriteLine("This is list of supported commands:");
                     Console.WriteLine("help  ..  prints this list");
@@ -62,9 +62,6 @@ namespace HDUnit {
                     state = 1;
                     break;
                 case "run_tests":
-                    HDTester.RunTests(command);
-                    state = 1;
-                    break;
                 case "run_test":
                     HDTester.RunTests(command);
                     state = 1;
@@ -121,12 +118,15 @@ namespace HDUnit {
                     }
                     if (splited[i] == failedKeyword || splited[i] == failedShortcut) {
                         RunAs = RunMode.Failed;
+                        continue;
                     }
                     if (splited[i] == passedKeyword || splited[i] == passedShortcut) {
                         RunAs = RunMode.Passed;
+                        continue;
                     }
                     if (splited[i] == unrunKeyword || splited[i] == unrunShortcut) {
                         RunAs = RunMode.New;
+                        continue;
                     }
                     Args.Add(splited[i]);
                 }
@@ -139,15 +139,15 @@ namespace HDUnit {
         }
     }   
     public class Command {
-        public string Name { get; set; }
-        public string[] Args { get; set; }
-        public string[] Class { get; set; }
-        public string[] Namespace { get; set; }
+        public string Value { get; set; }
+        public string[] Args { get; set; } = Array.Empty<string>();
+        public string[] Class { get; set; } = Array.Empty<string>();
+        public string[] Namespace { get; set; } = Array.Empty<string>();
         public bool MultithreadRun { get; set; }
         public RunMode RunAs { get; set; }
 
         public Command(string Name, string[] Args, string[] Class, string[] Namespace, bool Multithreaded, RunMode RunAs) {
-            this.Name = Name;
+            this.Value = Name;
             this.RunAs = RunAs;
             if (Args.Length > 0) {
                 this.Args = Args;
