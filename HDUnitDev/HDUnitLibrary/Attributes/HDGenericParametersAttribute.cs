@@ -5,22 +5,25 @@ using System.Text;
 namespace HDUnit.Attributes {
 
     /// <summary>
-    /// Attribute for passing parameters to a generic TestMethod.
+    /// Attribute for passing generic types and parameters to a generic TestMethod.
     /// </summary>
-    /// <example><code lang="cs">
-    ///     [HDTestMethod]
-    ///     [HDGenericParameters([int, string], [0, "priklad", 42])]
-    ///     [HDGenericParameters([string, string], ["druhy", "priklad", 47])]    
-    ///     MyTestMethod &lt;T, U&gt; (T t, U u, int i) {
-    ///         ...
-    ///     }
-    /// </code></example>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
     public class HDGenericParametersAttribute : HDRootAttribute {
 
+        /// <summary>
+        /// Types used for construction of a generic method
+        /// </summary>
         public Type[] Types { get; set; }
+        /// <summary>
+        /// Parameters used for calling the resulting generic method
+        /// </summary>
         public object[] Parameters { get; set; }
 
+        /// <summary>
+        /// Attribute for passing generic and normal parameters to a generic TestMethod.
+        /// </summary>
+        /// <param name="Types">Types used for construction of a generic method</param>
+        /// <param name="Parameters">Parameters used for calling the resulting generic method</param>
         public HDGenericParametersAttribute(Type[] Types, params object[] Parameters) {
             this.Types = Types;
             this.Parameters = Parameters;
