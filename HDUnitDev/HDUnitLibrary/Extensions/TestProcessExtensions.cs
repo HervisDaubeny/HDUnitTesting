@@ -7,7 +7,7 @@ namespace HDUnit.Extensions {
     public static class TestProcessExtensions {
 
         public static string GetClassName(this TestProcess testProcess) {
-            return testProcess.GetType().ToString();
+            return testProcess.ClassName;
         }
         
         public static TestResultContainer[] GetResultContainersArray(this IEnumerable<TestProcess> testProcesses) {
