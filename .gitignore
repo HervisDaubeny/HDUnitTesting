@@ -338,3 +338,6 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+/HDUnitDev/Docs/HDUnitLibrary.GeneratedXmlDoc.md
+/HDUnitDev/HDUnitLibrary/HDUnitLibrary.xml
+/PresentationNotes.txt
