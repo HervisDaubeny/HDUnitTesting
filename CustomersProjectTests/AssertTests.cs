@@ -24,6 +24,7 @@ namespace CustomersProjectTests {
         }
 
         [HDTestMethod]
+        [HDRunAfter("CollectionsEqual")]
         [HDParameters(new int[] { 1,2,3,4,5,6,7,8,9})]
         [HDParameters(new int[] { 1,3,5,7,9})]
         public void AllInCollectionTest(int[] collection) {
