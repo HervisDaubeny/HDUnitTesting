@@ -26,6 +26,8 @@ namespace HDUnit {
         const string unrunKeyword = "--unruned";
         const string unrunShortcut = "-u";
 
+        static string help = "";
+
         static char[] inputSeparators = new char[] { ' ' };
         static int state = 0;
 
@@ -33,6 +35,7 @@ namespace HDUnit {
         /// Start up ConsoleControl.
         /// </summary>
         public static void Run() {
+            ConfigureHelp();
             while (state >= 0) {
                 switch (state) {
                     case 0:
@@ -44,6 +47,49 @@ namespace HDUnit {
                     default:
                         break;
                 }
+            }
+
+            void ConfigureHelp() {
+                string separator = new string('=', 42);
+
+                StringBuilder optionsBuilder = new StringBuilder();
+                optionsBuilder.Append("Example usage:  run_tests -c:ClassName --namespace:MyNamespace MyTestMethod1 MyTestMethod2\n");
+                optionsBuilder.Append("Options having ':' must have name argument right after.\n");
+                optionsBuilder.Append($"{classShortcut},  {classKeyword}".PadLeft(2).PadRight(25));
+                optionsBuilder.Append("specify class searched for test methods\n");
+                optionsBuilder.Append($"{namespaceShortcut},  {namespaceKeyword}".PadLeft(2).PadRight(25));
+                optionsBuilder.Append("specify namespace searched for test classes\n");
+                optionsBuilder.Append($"{repeatShortcut},   {repeatKeyword}".PadLeft(2).PadRight(25));
+                optionsBuilder.Append("run same tests ran in the last test run\n");
+                optionsBuilder.Append($"{failedShortcut},   {failedKeyword}".PadLeft(2).PadRight(25));
+                optionsBuilder.Append("run tests that failed in the last test run\n");
+                optionsBuilder.Append($"{passedShortcut},   {passedKeyword}".PadLeft(2).PadRight(25));
+                optionsBuilder.Append("run tests that failed in the last test run\n");
+                optionsBuilder.Append($"{unrunShortcut},   {unrunKeyword}".PadLeft(2).PadRight(25));
+                optionsBuilder.Append("run tests that were not ran in the last test run\n");
+                optionsBuilder.Append($"{multithreadShortcut},   {multithreadKeyword}".PadLeft(2).PadRight(25));
+                optionsBuilder.Append("run tests in multiple threads\n");
+                string options = optionsBuilder.ToString();
+
+                StringBuilder helpBuilder = new StringBuilder();
+                helpBuilder.Append("Command 'help'\n");
+                helpBuilder.Append("Usage:  help\nPrints this help list.\n");
+                helpBuilder.Append(separator + '\n');
+                helpBuilder.Append("Command 'run_tests'\n");
+                helpBuilder.Append("Usage:  run_tests [OPTION]... [NAMES]...\nRun all tests on default.\nOptions and Names specify which tests to run.\n\n");
+                helpBuilder.Append(options);
+                helpBuilder.Append(separator + '\n');
+                helpBuilder.Append("Command 'run_test'");
+                helpBuilder.Append("Usage:  run_test [OPTION]... <NAME>...\nRun single test. Options specify where to look for the test method.\n\n");
+                helpBuilder.Append("Example usage:  run_test --class:ClassName -n:MyNamespace MyTestMethod3\n");
+                helpBuilder.Append("Options having ':' must have name argument right after.\n");
+                helpBuilder.Append($"{classShortcut},  {classKeyword}".PadLeft(2).PadRight(25));
+                helpBuilder.Append("specify class searched for test methods\n");
+                helpBuilder.Append($"{namespaceShortcut},  {namespaceKeyword}".PadLeft(2).PadRight(25));
+                helpBuilder.Append("specify namespace searched for test classes\n");
+
+                helpBuilder.Append(separator);
+                help = helpBuilder.ToString();
             }
 
         }
@@ -66,11 +112,7 @@ namespace HDUnit {
 
             switch (command.Value) {
                 case "help":
-                    Console.WriteLine("This is list of supported commands:");
-                    Console.WriteLine("help  ..  prints this list");
-                    Console.WriteLine("run_test  ..  runs single test");
-                    Console.WriteLine("run_tests  ..  runs all tests");
-                    //TODO: fill the list of commands
+                    Console.WriteLine(help);
                     state = 1;
                     break;
                 case "run_tests":
